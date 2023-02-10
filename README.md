@@ -1,2 +1,3 @@
-# ROR-ES
-A simple server
+ROR Erlang Server
+
+A simple server project.
