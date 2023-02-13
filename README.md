@@ -1,3 +1,3 @@
-ROR Erlang Server
+# ROR Erlang Server
 
 A simple server project.
