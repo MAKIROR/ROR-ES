@@ -36,14 +36,13 @@ acceptor(Listener) ->
 
 handle_client(Socket) ->
     receive
-        {tcp,Socket}->
+        {tcp, Socket}->
             handle_client(Socket);
-        {tcp_quit, Socket} ->
-            io:format("Close the client connection ~n");
-        Msg ->
-            io:format("got a new message: ~p ~n",[Msg]),
+        {tcp_closed, Socket} ->
+            io:format("Close a client connection ~n");
+        {tcp, _, Msg} ->
+            io:format("Got a new message: ~p ~n",[Msg]),
             handle_client(Socket)
     end.
-
 
 
