@@ -1,14 +1,11 @@
 %%%-------------------------------------------------------------------
 %%% @author Makiror
-%%% @doc
-%%%
-%%% @end
 %%% Created : February 2023
 %%%-------------------------------------------------------------------
 
 -module(rores_server).
 
-%% API
+% API
 -export([
         start/1,
         start/0,
@@ -31,6 +28,8 @@ start() ->
 
 acceptor(Listener) -> 
     {ok, Socket} = gen_tcp:accept(Listener),
+    {ok, {Address, Port}} = inet:peername(Socket),
+    io:format("New connection: ~s:~p ~n",[inet:ntoa(Address), Port]),
     spawn(fun() -> acceptor(Listener) end),
     handle_client(Socket).
 
