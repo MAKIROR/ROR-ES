@@ -8,8 +8,7 @@
 % API
 -export([
         start/1,
-        start/0,
-        acceptor/1
+        start/0
         ]).
 
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, true}]).
@@ -37,9 +36,9 @@ handle_client(Socket) ->
     receive
         {tcp, Socket}->
             handle_client(Socket);
-        {tcp_closed, Socket} ->
+        {tcp_closed, _} ->
             io:format("Close a client connection ~n");
-        {tcp, _, Msg} ->
+        {tcp, Socket, Msg} ->
             io:format("Got a new message: ~p ~n",[Msg]),
             handle_client(Socket)
     end.
