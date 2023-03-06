@@ -7,29 +7,21 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/2]).
 
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(Host, Port) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Host, Port]).
 
-%% sup_flags() = #{strategy => strategy(),         % optional
-%%                 intensity => non_neg_integer(), % optional
-%%                 period => pos_integer()}        % optional
-%% child_spec() = #{id => child_id(),       % mandatory
-%%                  start => mfargs(),      % mandatory
-%%                  restart => restart(),   % optional
-%%                  shutdown => shutdown(), % optional
-%%                  type => worker(),       % optional
-%%                  modules => modules()}   % optional
-init([]) ->
+init([Host, Port]) ->
     SupFlags = #{strategy => one_for_all,
                  intensity => 0,
                  period => 1},
-    ChildSpecs = [],
+    ChildSpecs = [    
+        {validator, {rores_validator, start, []}, permanent, 5000, worker, [rores_server]},
+        {server, {rores_server, start, [Host, Port]}, permanent, 5000, worker, [rores_server]}
+    ],
     {ok, {SupFlags, ChildSpecs}}.
-
-%% internal functions
