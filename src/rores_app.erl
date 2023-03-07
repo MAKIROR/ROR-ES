@@ -23,7 +23,6 @@ start(_Type, _StartArgs) ->
             ok
     end.
 
-
 stop(_State) ->
     ok.
 

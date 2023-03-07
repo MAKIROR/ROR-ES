@@ -7,7 +7,8 @@
 
 % API
 -export([
-    start/0
+    start/0,
+    stop/1
 ]).
 
 start() ->
@@ -15,7 +16,7 @@ start() ->
 
 loop() ->
     receive
-        {Node, Username} ->
+        {verify, Node, Username} ->
             Result = verify_username(Username),
             Node ! Result
 end.
@@ -29,6 +30,9 @@ verify_username(Username) ->
         _ -> 
             {ok, Username}
     end.
+
+stop(_State) ->
+    ok.
 
 
 
