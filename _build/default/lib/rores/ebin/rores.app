@@ -5,6 +5,6 @@
               {mod,{rores_app,[]}},
               {applications,[kernel,stdlib]},
               {env,[]},
-              {modules,[rores_app,rores_client,rores_server,rores_sup]},
+              {modules,[rores_app,rores_server,rores_sup,rores_validator]},
               {licenses,["Apache 2.0"]},
               {links,[]}]}.

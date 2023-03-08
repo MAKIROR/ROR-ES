@@ -14,13 +14,14 @@
 
 start(_Type, _StartArgs) ->
     case file:consult("config/server.config") of
-        {ok, [{hostname, Host}, {port, Port}]} ->
-            rores_sup:start_link(Host, Port),
-            ok;
+        {ok, [[{hostname, Host}, {port, Port}]]} ->
+            rores_sup:start_link(Host, Port);
         {error, Reason} ->
             io:format("Failed to read config file: ~p~n", [Reason]),
-            rores_sup:start_link("localhost"),
-            ok
+            rores_sup:start_link("localhost", 9527);
+        Result -> 
+            io:format("Failed to read config file: ~p~n", [Result]),
+            rores_sup:start_link("localhost", 9527)
     end.
 
 stop(_State) ->
