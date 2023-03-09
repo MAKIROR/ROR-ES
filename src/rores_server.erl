@@ -8,13 +8,13 @@
 
 % API
 -export([
+    start_link/3,
     init/1,
     handle_call/3,
     handle_cast/2,
     handle_info/2,
     terminate/2,
-    code_change/3,
-    start_link/0
+    code_change/3
 ]).
 
 -record(state, {clients=[]}).
@@ -23,28 +23,32 @@
 %%% API
 %%%===================================================================
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Port, ValidatorName, ServerName) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Port, ValidatorName, ServerName], []).
 
-init([Host, Port]) ->
-    {ok, Listener} = gen_tcp:listen(Port, [binary, {packet, 0}, {reuseaddr, true}, {active, false}, {ip, Host}]),
-    {ok, Validator} = net_kernel:connect_node('rores_validator@' ++ Host),
-    spawn(fun() -> acceptor(Listener, Validator) end),
+init([Port, ValidatorName, ServerName]) ->
+    {ok, Listener} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, once}]),
+    net_kernel:start([ServerName]),
+    case net_adm:ping(ValidatorName) of
+        pong ->
+            io:format("Chat server started: ~p~n", [self()]),
+            spawn(fun() -> acceptor(Listener, ValidatorName) end);
+        pang ->
+            io:format("Unable connect to validator~n", [])
+    end,
     {ok, #state{clients = []}}.
 
-acceptor(Listener, Validator) -> 
+acceptor(Listener, ValidatorName) -> 
     {ok, Socket} = gen_tcp:accept(Listener),
     {ok, {Address, Port}} = inet:peername(Socket),
     io:format("New connection: ~s:~p ~n",[inet:ntoa(Address), Port]),
-    spawn(fun() -> acceptor(Listener, Validator) end),
-    handle_connection(Socket, Validator).
+    spawn(fun() -> acceptor(Listener, ValidatorName) end),
+    handle_connection(Socket, ValidatorName).
 
-handle_connection(Socket, Validator) ->
+handle_connection(Socket,ValidatorName) ->
     receive
         {ok, Username} ->
-            Ref = erlang:monitor(process, Validator),
-            Validator ! {{verify, Username}, self(), Ref},
-            receive
+            case roc:call(ValidatorName, rores_vaildator, verify_username, [Username]) of
                 {ok, _} ->
                     io:format("Verification passed~n"),
                     Socket ! {ok},
@@ -52,10 +56,8 @@ handle_connection(Socket, Validator) ->
                 {error, Reason} ->
                     io:format("Verification failed: ~p~n", [Reason]),
                     Socket ! {error, verification_failed, Reason}
-            after 5000 ->
-                    io:format("Authentication timeout~n"),
-                    Socket ! {error, verification_failed, timeout}
             end;
+            
         {error, Reason} ->
             io:format("Error receiving message: ~p~n", [Reason])
     end.

@@ -4,29 +4,18 @@
 %%%-------------------------------------------------------------------
 
 -module(rores_validator).
--behavior(gen_server).
 
 % API
 -export([
-    start_link/0,
-    init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2
+    start/1,
+    verify_username/1
 ]).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+%todo
 
-init([]) ->
-    io:format("Validator started.~n"),
-    {ok, []}.
-
-handle_call({verify, Username}, Node, State) ->
-    Result = verify_username(Username),
-    net_kernel:send(Node, {reply, Result}),
-    {reply, ok, State}.
+start(ValidatorName) ->
+    {ok, Pid} = net_kernel:start([ValidatorName]),
+    io:format("Validator started: ~p~n", [Pid]).
 
 verify_username(Username) ->
     case length(Username) of
@@ -37,12 +26,3 @@ verify_username(Username) ->
         _ -> 
             {error, "Username must be between 6-20 characters."}
     end.
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
