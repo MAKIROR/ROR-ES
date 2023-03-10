@@ -43,23 +43,22 @@ acceptor(Listener, ValidatorName) ->
     {ok, {Address, Port}} = inet:peername(Socket),
     io:format("New connection: ~s:~p ~n",[inet:ntoa(Address), Port]),
     spawn(fun() -> acceptor(Listener, ValidatorName) end),
-    handle_connection(Socket, ValidatorName).
 
-handle_connection(Socket,ValidatorName) ->
     receive
-        {ok, Username} ->
-            case roc:call(ValidatorName, rores_vaildator, verify_username, [Username]) of
-                {ok, _} ->
+        {tcp, _, Username} ->
+            case rpc:call(ValidatorName, rores_validator, verify, [binary_to_list(Username)]) of
+                {ok, User} ->
                     io:format("Verification passed~n"),
-                    Socket ! {ok},
-                    receive_msg(Socket, Username);
+                    gen_tcp:send(Socket, User),
+                    receive_msg(Socket, User);
                 {error, Reason} ->
                     io:format("Verification failed: ~p~n", [Reason]),
-                    Socket ! {error, verification_failed, Reason}
+                    gen_tcp:send(Socket, {auth_failed, Reason})
             end;
             
         {error, Reason} ->
-            io:format("Error receiving message: ~p~n", [Reason])
+            io:format("Error receiving message: ~p~n", [Reason]),
+            gen_tcp:close(Socket)
     end.
 
 receive_msg(Socket, Username) ->

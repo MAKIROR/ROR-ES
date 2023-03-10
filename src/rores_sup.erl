@@ -20,7 +20,7 @@ init([Port, ValidatorName, ServerName]) ->
                  intensity => 0,
                  period => 1},    
     ChildSpecs = [
-        {validator, {rores_validator, start, [ValidatorName]}, permanent, 5000, worker, [rores_vaildator]},
+        {validator, {rores_validator, start_link, [ValidatorName]}, permanent, 5000, worker, [rores_vaildator]},
         {server, {rores_server, start_link, [Port, ValidatorName, ServerName]}, permanent, 5000, worker, [rores_server]}
     ],
     {ok, {SupFlags, ChildSpecs}}.

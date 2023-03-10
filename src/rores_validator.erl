@@ -4,20 +4,26 @@
 %%%-------------------------------------------------------------------
 
 -module(rores_validator).
+-behavior(gen_server).
 
 % API
--export([
-    start/1,
-    verify_username/1
-]).
+-export([start_link/1, init/1, handle_call/3, handle_cast/2, verify/1]).
 
-%todo
+start_link(ValidatorName) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [ValidatorName], []).
 
-start(ValidatorName) ->
-    {ok, Pid} = net_kernel:start([ValidatorName]),
-    io:format("Validator started: ~p~n", [Pid]).
+init([ValidatorName]) ->
+    net_kernel:start([ValidatorName]),
+    io:format("Validator started: ~p~n", [self()]),
+    {ok, []}.
 
-verify_username(Username) ->
+handle_call({verify}, _From, State) ->
+    {noreply, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+verify(Username) ->
     case length(Username) of
         0 -> 
             {error, "Username cannot be empty."};
