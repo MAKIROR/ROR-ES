@@ -18,7 +18,8 @@
 ]).
 
 -record(state, {
-    port :: integer()
+    port :: integer(),
+    manager :: pid()
 }).
 
 %%%===================================================================
@@ -29,18 +30,24 @@ start_link(Port, ValidatorName, ServerName) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Port, ValidatorName, ServerName], []).
 
 init([Port, ValidatorName, ServerName]) ->
-    {ok, Listener} = gen_tcp:listen(Port, [binary, {packet, 2}, {active, true}]),
-    net_kernel:start([ServerName]),
-    case net_adm:ping(ValidatorName) of
-        pong ->
-            io:format("Chat server started: ~p~n", [self()]),
-            Manager = spawn(fun() -> manage_clients([]) end),
-            spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end),
-            {ok, #state{port = Port}};
-        pang ->
-            io:format("Unable connect to validator~n", [])
-    end,
-    {ok, []}.
+    case gen_tcp:listen(Port, [binary, {packet, 2}, {active, true}]) of
+        {ok, Listener} ->
+            net_kernel:start([ServerName]),
+            case net_adm:ping(ValidatorName) of
+                pong ->
+                    io:format("Chat server started: ~p~n", [self()]),
+                    Manager = spawn(fun() -> manage_clients([]) end),
+                    spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end),
+                    {ok, #state{port = Port, manager = Manager}};
+                pang ->
+                    io:format("Unable connect to validator~n", [])
+            end,
+            {ok, []};
+        {error, Reason} ->
+            io:format("Unable to start server: ~s~n", [Reason]),
+            {stop, Reason}
+    end.
+
 
 manage_clients(Clients) ->
     receive
@@ -52,7 +59,10 @@ manage_clients(Clients) ->
         {remove_client, Pid} ->
             UpdatedClients = lists:delete(Pid, Clients),
             io:format("Client removed: ~p~n", [Pid]),
-            manage_clients(UpdatedClients)
+            manage_clients(UpdatedClients);
+        {close_all} ->
+            lists:foreach(fun(Pid) -> Pid ! {stop} end, Clients),
+            manage_clients([])
     end.
 
 acceptor(Listener, ValidatorName, Manager) -> 
@@ -93,7 +103,8 @@ receive_msg(Socket, Username, Manager) ->
             receive_msg(Socket, Username, Manager);
         {tcp_closed, Socket} ->
             io:format("Close a client connection ~n"),
-            gen_tcp:close(Socket);
+            gen_tcp:close(Socket),
+            Manager ! {remove_client, self()};
         {tcp, Socket, Msg} ->
             Str = io_lib:format("~s: ~s ~n",[Username, Msg]),
             Manager ! {broadcast, Str},
@@ -115,7 +126,9 @@ handle_info(_Info, State) ->
 
 terminate(_Reason, State) ->
     Port = State#state.port,
+    Manager = State#state.manager,
     ok = gen_tcp:close(Port),
+    Manager ! {close_all},
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
