@@ -17,6 +17,10 @@
     code_change/3
 ]).
 
+-record(state, {
+    port :: integer()
+}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -31,7 +35,8 @@ init([Port, ValidatorName, ServerName]) ->
         pong ->
             io:format("Chat server started: ~p~n", [self()]),
             Manager = spawn(fun() -> manage_clients([]) end),
-            spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end);
+            spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end),
+            {ok, #state{port = Port}};
         pang ->
             io:format("Unable connect to validator~n", [])
     end,
@@ -81,10 +86,14 @@ receive_msg(Socket, Username, Manager) ->
         {msg, Msg} ->
             send_msg(Socket, {msg, Msg}),
             receive_msg(Socket, Username, Manager);
+        {stop} ->
+            io:format("Close a client connection ~n"),
+            gen_tcp:close(Socket);
         {tcp, Socket} ->
             receive_msg(Socket, Username, Manager);
-        {tcp_closed, _} ->
-            io:format("Close a client connection ~n"); 
+        {tcp_closed, Socket} ->
+            io:format("Close a client connection ~n"),
+            gen_tcp:close(Socket);
         {tcp, Socket, Msg} ->
             Str = io_lib:format("~s: ~s ~n",[Username, Msg]),
             Manager ! {broadcast, Str},
@@ -104,7 +113,9 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    Port = State#state.port,
+    ok = gen_tcp:close(Port),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
