@@ -17,7 +17,7 @@ init([ValidatorName]) ->
     io:format("Validator started: ~p~n", [self()]),
     {ok, []}.
 
-handle_call({verify}, _From, State) ->
+handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(_Msg, State) ->

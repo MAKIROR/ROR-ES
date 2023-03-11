@@ -17,8 +17,6 @@
     code_change/3
 ]).
 
--record(state, {clients=[]}).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -27,50 +25,75 @@ start_link(Port, ValidatorName, ServerName) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Port, ValidatorName, ServerName], []).
 
 init([Port, ValidatorName, ServerName]) ->
-    {ok, Listener} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, once}]),
+    {ok, Listener} = gen_tcp:listen(Port, [binary, {packet, 2}, {active, true}]),
     net_kernel:start([ServerName]),
     case net_adm:ping(ValidatorName) of
         pong ->
             io:format("Chat server started: ~p~n", [self()]),
-            spawn(fun() -> acceptor(Listener, ValidatorName) end);
+            Manager = spawn(fun() -> manage_clients([]) end),
+            spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end);
         pang ->
             io:format("Unable connect to validator~n", [])
     end,
-    {ok, #state{clients = []}}.
+    {ok, []}.
 
-acceptor(Listener, ValidatorName) -> 
+manage_clients(Clients) ->
+    receive
+        {broadcast, Msg} ->
+            lists:foreach(fun(Pid) -> Pid ! {msg, Msg} end, Clients),
+            manage_clients(Clients);
+        {add_client, Pid} ->
+            manage_clients(lists:append([Pid], Clients));
+        {remove_client, Pid} ->
+            UpdatedClients = lists:delete(Pid, Clients),
+            io:format("Client removed: ~p~n", [Pid]),
+            manage_clients(UpdatedClients)
+    end.
+
+acceptor(Listener, ValidatorName, Manager) -> 
     {ok, Socket} = gen_tcp:accept(Listener),
     {ok, {Address, Port}} = inet:peername(Socket),
     io:format("New connection: ~s:~p ~n",[inet:ntoa(Address), Port]),
-    spawn(fun() -> acceptor(Listener, ValidatorName) end),
+    spawn(fun() -> acceptor(Listener, ValidatorName, Manager) end),
 
     receive
         {tcp, _, Username} ->
             case rpc:call(ValidatorName, rores_validator, verify, [binary_to_list(Username)]) of
                 {ok, User} ->
-                    io:format("Verification passed~n"),
-                    gen_tcp:send(Socket, User),
-                    receive_msg(Socket, User);
+                    io:format("Verification passed: ~s:~p~n",[inet:ntoa(Address), Port]),
+                    Manager ! {add_client, self()},
+                    send_msg(Socket, {ok, User}),
+                    receive_msg(Socket, User, Manager);
                 {error, Reason} ->
                     io:format("Verification failed: ~p~n", [Reason]),
-                    gen_tcp:send(Socket, {auth_failed, Reason})
+                    send_msg(Socket, {auth_failed, Reason})
             end;
-            
+        {error, closed} ->
+            io:format("Client closed the connection~n"),
+            gen_tcp:close(Socket);
         {error, Reason} ->
             io:format("Error receiving message: ~p~n", [Reason]),
             gen_tcp:close(Socket)
     end.
 
-receive_msg(Socket, Username) ->
-    case gen_tcp:recv(Socket, 0) of
-        {error, Reason} ->
-            io:format("Error receiving message: ~p~n", [Reason]);
-        {ok, stop} ->
-            io:format("Close a client connection ~n");
-        {ok, Data} ->
-            io:format("Got a new message from ~p: ~p ~n",[Username, Data]),
-            receive_msg(Socket, Username)
+receive_msg(Socket, Username, Manager) ->
+    receive
+        {msg, Msg} ->
+            send_msg(Socket, {msg, Msg}),
+            receive_msg(Socket, Username, Manager);
+        {tcp, Socket} ->
+            receive_msg(Socket, Username, Manager);
+        {tcp_closed, _} ->
+            io:format("Close a client connection ~n"); 
+        {tcp, Socket, Msg} ->
+            Str = io_lib:format("~s: ~s ~n",[Username, Msg]),
+            Manager ! {broadcast, Str},
+            receive_msg(Socket, Username, Manager)
     end.
+
+send_msg(Socket, Msg) ->
+    BinData = term_to_binary(Msg),
+    gen_tcp:send(Socket, BinData).
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -86,4 +109,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
